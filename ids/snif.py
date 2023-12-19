@@ -6,6 +6,7 @@ from scapy.layers.inet import TCP
 from scapy.sendrecv import sniff
 from sklearn.ensemble import RandomForestClassifier
 import numpy as np
+import joblib
 
 import train
 from flow.Flow import Flow
@@ -145,8 +146,11 @@ def main(mode, pcap_file):
     X = x_train
     Y = y_train
     normalisation = min_max_scaler
+    joblib.dump(min_max_scaler, "normalisation.pkl")
 
     classifier = RandomForestClassifier()
+    joblib_file = "classifier.pkl"
+    joblib.dump(classifier, joblib_file)
     classifier = classifier.fit(X, Y)
     print(" Sniffing ".center(20, '*'))
     if mode == 0:
