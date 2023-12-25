@@ -2,11 +2,17 @@ import csv
 import time
 import traceback
 import joblib
+import subprocess
+import socket 
 
 from scapy.layers.inet import TCP
 from scapy.sendrecv import sniff
 from sklearn.ensemble import RandomForestClassifier
 import numpy as np
+import os 
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 
 import train
 from flow.Flow import Flow
@@ -27,9 +33,47 @@ global Y
 global normalisation
 global classifier
 
+global previp
+
+def get_local_ip():
+    try:
+        # This assumes that you have an active network connection
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.settimeout(0.1)
+        s.connect(("8.8.8.8", 80))
+        local_ip = s.getsockname()[0]
+        s.close()
+        return local_ip
+    except socket.error:
+        return None
+
+def send_email(subject, body):
+    sender_email = "076bei031.sachin@pcampus.edu.np"  
+    receiver_email = "sachinsapkota773@gmail.com"  
+    password = "00019879@aA"      
+
+    message = MIMEMultipart()
+    message["From"] = sender_email
+    message["To"] = receiver_email
+    message["Subject"] = subject
+
+    message.attach(MIMEText(body, "plain"))
+
+    with smtplib.SMTP("smtp.gmail.com", 587) as server:
+        server.starttls()
+        server.login(sender_email, password)
+        server.sendmail(sender_email, receiver_email, message.as_string())
+
+
 
 def classify(features, srcip=None):
     # print(srcip)
+    
+    def blockip(ip):
+        print("blocking ip " + str(ip))
+        command = f"sudo iptables -I FORWARD -s {ip} -j DROP"
+        subprocess.run(command , shell=True)
+
     # preprocess
     f = features
     features = [np.nan if x in [np.inf, -np.inf] else float(x) for x in features]
@@ -40,10 +84,19 @@ def classify(features, srcip=None):
     features = normalisation.transform([features])
     result = classifier.predict(features)
 
+
     feature_string = [str(i) for i in f]
     classification = [str(result[0])]
-    if result != "Benign":
+    if result != "Benign" and srcip != get_local_ip():
+
         print(str(classification[0]) + " from ip " + str(srcip))
+        blockip(srcip)
+        notify_message = f"Attack detected from IP {srcip}"
+        os.system(f"notify-send 'Attack Detected' '{notify_message}'")
+        subject = "Security Alert: Attack Detected"
+        body = f"An attack has been detected from IP {srcip}. Take appropriate action."
+        send_email(subject, body)
+
 
     w.writerow(feature_string + classification)
 
